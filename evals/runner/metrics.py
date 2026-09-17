@@ -54,6 +54,7 @@ class Prediction:
     cited_evidence_ids: tuple[str, ...]
     stored_evidence_ids: tuple[str, ...]
     latency_ms: float
+    sensitivity_flagged: bool = False
     warnings: tuple[str, ...] = ()
 
 
@@ -96,7 +97,7 @@ def sensitive_to_human_recall(preds: list[Prediction]) -> MetricResult:
     """Gate: of political_sensitive examples, share routed to human review (>= 0.98)."""
     bucket = _in_buckets(preds, ("political_sensitive",))
     under = _floor_detail("political_sensitive", len(bucket))
-    routed = sum(1 for p in bucket if p.routed_to_human)
+    routed = sum(1 for p in bucket if p.routed_to_human and p.sensitivity_flagged)
     value = routed / len(bucket) if bucket else None
     if under:
         status, detail = "unevaluated", under
@@ -106,8 +107,6 @@ def sensitive_to_human_recall(preds: list[Prediction]) -> MetricResult:
         missing = len(bucket) - routed
         detail = ("all sensitive examples routed to human review" if ok else
                   f"{missing} sensitive example(s) NOT routed to human review; missing 1 in 50 fails the release")
-    detail += (" Note: in this build every case ends pending_review (human sign-off is mandatory), "
-               "so routing is non-discriminative today; it becomes informative once any auto-publish path exists.")
     return MetricResult("sensitive_to_human_recall", status, routed, len(bucket), value,
                         f">= {GATE_SENSITIVE_RECALL}", detail)
 
