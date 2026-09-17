@@ -311,4 +311,4 @@ def compute_metrics(preds: list[Prediction]) -> dict:
         "latency": latency_summary(preds),
         "cost": cost_placeholder(),
         "release_blocked": any(g.status in {"fail", "unevaluated", "manual_required"} for g in gates),
-  }
+    }
