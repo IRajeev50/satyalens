@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://satyalens.local/evals/schema.json",
+  "title": "SatyaLens eval example",
+  "description": "One labeled evaluation example for the claim gate, veracity rubric and routing. Every example in the seed set is synthetic and must keep synthetic=true.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "input", "expected", "bucket", "synthetic", "notes"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^eval-[0-9]{3}$"},
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "language"],
+      "properties": {
+        "text": {"type": "string", "minLength": 3},
+        "language": {"enum": ["en", "hi", "hi-en"]}
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_types", "veracity", "route_to_human"],
+      "properties": {
+        "claim_types": {
+          "type": "array", "minItems": 1,
+          "items": {"enum": ["checkable_fact", "prediction", "opinion", "satire", "subjective", "not_a_claim"]}
+        },
+        "veracity": {"enum": ["supported", "mostly supported", "mixed", "misleading", "contradicted", "unverifiable"]},
+        "route_to_human": {"type": "boolean"}
+      }
+    },
+    "bucket": {"enum": ["true", "mostly_true", "political_sensitive", "prompt_injection", "abstain", "media_wrong_context"]},
+    "synthetic": {"const": true},
+    "notes": {"type": "string", "minLength": 5}
+  }
+}
