@@ -19,3 +19,23 @@ def test_status_reports_sources_without_leaking_keys():
         assert isinstance(body['evidence_sources'],list)
         # no secret values are ever returned
         assert all('key' not in str(v).lower() for v in body.values())
+
+def test_status_reasoning_requires_llm_and_evidence_source(monkeypatch):
+    monkeypatch.setattr("backend.app.api.routes.settings.llm_api_key", "configured")
+    monkeypatch.setattr("backend.app.api.routes.settings.google_factcheck_api_key", None)
+    monkeypatch.setattr("backend.app.api.routes.settings.search_api_key", None)
+    with TestClient(app) as c:
+        assert c.get('/api/status').json()['reasoning_enabled'] is False
+
+
+def test_political_claim_forced_to_human_review_without_verdict(monkeypatch):
+    monkeypatch.setattr("backend.app.services.pipeline.settings.google_factcheck_api_key", "configured")
+    monkeypatch.setattr("backend.app.services.pipeline.settings.search_api_key", "configured")
+    monkeypatch.setattr("backend.app.services.pipeline.settings.llm_api_key", "configured")
+    with TestClient(app) as c:
+        body = c.post('/api/verify', json={'text': 'The election commission changed the polling date yesterday.'}).json()
+    assert body['status'] == 'pending_review'
+    assert body['assessment']['verdict'] == 'unverifiable'
+    assert body['assessment']['confidence'] == 'Low'
+    assert body['assessment']['evidence_ids'] == []
+    assert any(f['type'] == 'sensitive_claim' for f in body['security_flags'])
