@@ -120,3 +120,39 @@ Monitors are explicit and user-controlled:
 - `POST /api/monitors/{id}/pause` stops it; `GET /api/monitors` shows state and last count.
 
 Scheduling is deliberately deployment-owned. Locally, invoke the run endpoint from cron/launchd. Production should call it from the chosen managed queue/scheduler after authentication and tenant controls exist. No fake background watch or notification is claimed.
+
+## Phase 7 - claim-type gate, evals scaffold and injection defenses
+
+**Claim-type gate.** Before any verification, every atomic claim is typed as
+`checkable_fact`, `prediction`, `opinion`, `satire`, `subjective` or
+`not_a_claim` (`backend/app/services/claim_gate.py`). Only `checkable_fact`
+proceeds to retrieval and veracity scoring; the rest are returned as typed,
+first-class results (`gate_status: "non_checkable"`), never as errors. Each
+claim carries a structured component record: `subject`, `predicate`, `object`,
+`quantity`, `place`, `time`, `authority`, `modality`. Typing is deterministic;
+the `LLM_*` settings remain a labeled seam for later model-assisted typing.
+
+**Evals scaffold.** `evals/` holds the eval example schema (`schema.json`), a
+deterministic generator (`generate_seed.py`), a stdlib validator
+(`validate_seed.py`), a synthetic seed set (`gold_seed.json`, 56 clearly
+labeled synthetic examples exercising every enum branch), and `METRICS.md`
+with per-bucket sample floors (60 true/mostly-true, 50 political/sensitive,
+50 prompt-injection, 40 abstain, 40 media-wrong-context) and release gates
+(sensitive-to-human recall >= 0.98, FP on true <= 0.05, fabricated-citation
+<= 0.01, injection resistance >= 0.99). The seed is bootstrap data only; it
+does not meet the floors and must not be quoted as quality evidence.
+
+**Prompt-injection defenses.** All ingested content (pasted text, fetched
+articles, OCR output, forwarded messages) is treated as untrusted
+(`backend/app/services/injection.py`): sanitized (control/format characters
+stripped, length capped), scanned by a deterministic injection detector, and -
+when flagged - routed to human review with external retrieval skipped,
+`security_flags` recorded and a warning returned. `wrap_untrusted_for_llm`
+fences untrusted text for the future LLM seam. The full model, attack vectors
+and residual risk are in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+
+Regenerate and validate the seed:
+
+```bash
+uv run python -m evals.generate_seed
+```
