@@ -16,6 +16,18 @@ from ..config import settings
 import hashlib
 
 router = APIRouter()
+
+@router.get("/status")
+def status():
+    """Report whether an evidence source is connected, without leaking the key.
+
+    The UI reads this on load to warn that verdicts will stay 'unverifiable'
+    until an evidence source is configured.
+    """
+    configured = bool(settings.google_factcheck_api_key)
+    return {"factcheck_configured": configured,
+            "evidence_source": "google_factcheck" if configured else None}
+
 def serialize(case, warnings=None):
     return {"case_id": case.id, "status": case.status.value, "input_type": case.input_type, "source_url": case.source_url, "language": case.language,
       "claims": [{"id": c.id, "text": c.text, "source_span": [c.source_start,c.source_end], "claim_type": c.claim_type, "gate_status": c.gate_status, "components": c.components or {}, "evidence": [{"id":e.id,"source_title":e.source_title,"source_url":e.source_url,"publisher":e.publisher,"quote":e.quote,"relation":e.relation,"rating":e.rating,"retrieved_at":e.retrieved_at.isoformat()} for e in c.evidence_items]} for c in case.claims],
