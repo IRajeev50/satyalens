@@ -10,6 +10,7 @@ from .rubric import RUBRIC_VERSION, Finding, assess
 from . import reasoning, websearch, llm as llm_module
 from .url_fetch import fetch_article
 from .language import analyze, normalize
+from .sensitivity import detect as detect_sensitivity
 
 INJECTION_WARNING = ("Potential prompt-injection pattern detected in ingested content; "
                      "external retrieval was skipped and the case was routed to human review.")
@@ -77,6 +78,8 @@ async def _run_case(db: Session, raw_text: str, original_input: str, input_type:
 
     warnings, all_items = [], []
 
+    sensitivity = detect_sensitivity(normalized)
+
     if scan.flagged:
         case.security_flags = [{"type": "prompt_injection_suspected", "matches": list(scan.matches)}]
         warnings.append(INJECTION_WARNING)
@@ -85,6 +88,16 @@ async def _run_case(db: Session, raw_text: str, original_input: str, input_type:
                           "Human review is required before any verification.",
                           [gate_line, "Injection heuristic flagged the input; skipped external "
                            "retrieval and routed to human review."])
+        evidence_ids = []
+    elif sensitivity.flagged:
+        case.security_flags = [{"type": "sensitive_claim", "categories": list(sensitivity.categories),
+                                "matches": list(sensitivity.matches)}]
+        warnings.append("Politically sensitive or contested claim detected; no automated verdict is displayed before human review.")
+        finding = Finding("unverifiable", "Low",
+                          "This claim involves elections, political actors, identity conflict, or public order. "
+                          "It requires human review before any substantive verdict is shown.",
+                          [gate_line, "Sensitivity gate matched: " + ", ".join(sensitivity.categories) + ".",
+                           "Skipped automated retrieval and adjudication; routed to human review without a substantive verdict."])
         evidence_ids = []
     elif claims and not checkable:
         finding = Finding("unverifiable", "Low",
