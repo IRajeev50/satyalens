@@ -28,7 +28,7 @@ class FactCheckRetriever:
                             "quote": claim.get("text") or query,
                             "rating": review.get("textualRating"),
                             "relation": "related",
-                            "raw": {"claimant": claim.get("claimant"), "claim_date": claim.get("claimDate")},
+                            "raw": {"source_type": "fact_check", "claimant": claim.get("claimant"), "claim_date": claim.get("claimDate")},
                         })
                 return RetrievalResult(items=[x for x in items if x["source_url"]])
         except (httpx.HTTPError, ValueError) as exc:
