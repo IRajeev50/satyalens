@@ -57,7 +57,7 @@ async def test_adjudicate_none_without_llm():
 @pytest.mark.asyncio
 async def test_adjudicate_grounded_maps_citations_to_ids():
     ev = [{"id": "e1", "source_title": "PIB", "quote": "No such scheme.", "raw": {"source_type": "web_search"}}]
-    res = await reasoning.adjudicate_claim("claim", ev,
+    res = await reasoning.adjudicate_claim("No such scheme exists.", ev,
                                            FakeLLM(Adjudication("contradicted", "High", "PIB shows none.", [0], ["kp"])))
     assert res.finding.verdict == "contradicted"
     assert res.cited_ids == ["e1"]
@@ -120,3 +120,26 @@ def test_pipeline_injected_web_snippet_never_flips_verdict(monkeypatch):
         r = c.post("/api/verify", json={"text": "The moon landing was faked in 2026."})
         assert r.status_code == 200
         assert r.json()["assessment"]["verdict"] == "unverifiable"
+
+@pytest.mark.asyncio
+async def test_off_topic_cited_snippet_is_rejected():
+    ev = [{"id": "e1", "source_title": "Sports", "quote": "The cricket final starts tonight.",
+           "source_url": "https://sports.example/x", "raw": {"source_type": "web_search", "content_verified": True}}]
+    res = await reasoning.adjudicate_claim(
+        "The central bank raised interest rates yesterday.", ev,
+        FakeLLM(Adjudication("supported", "High", "Cited source proves it.", [0], [])))
+    assert res.finding.verdict == "unverifiable"
+    assert res.finding.confidence == "Low"
+    assert res.cited_ids == []
+    assert any("did not substantively" in line for line in res.finding.reasoning_path)
+
+@pytest.mark.asyncio
+async def test_confidence_capped_for_single_weak_snippet():
+    ev = [{"id": "e1", "source_title": "Rates report", "quote": "The central bank raised interest rates yesterday.",
+           "source_url": "https://news.example/x", "raw": {"source_type": "web_search", "content_verified": False}}]
+    res = await reasoning.adjudicate_claim(
+        "The central bank raised interest rates yesterday.", ev,
+        FakeLLM(Adjudication("supported", "High", "A search result says so.", [0], [])))
+    assert res.finding.verdict == "supported"
+    assert res.finding.confidence == "Low"
+    assert any("Capped confidence" in line for line in res.finding.reasoning_path)
