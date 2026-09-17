@@ -156,3 +156,35 @@ Regenerate and validate the seed:
 ```bash
 uv run python -m evals.generate_seed
 ```
+
+## Phase 8 - eval runner and annotation guidelines
+
+**Eval runner.** `evals/runner/` executes a gold set through the live
+pipeline (sanitize -> injection scan -> claim gate -> retrieval -> rubric,
+the same `pipeline.verify` path the API uses) against a throwaway SQLite
+database, computes the METRICS.md tables, and writes a JSON plus a Markdown
+report to `evals/reports/`:
+
+```bash
+make eval
+# options: --seed PATH --out-dir DIR --db-url URL --limit N
+```
+
+Honesty rules are enforced in code: buckets below their METRICS.md sample
+floor are reported as **unevaluated** (a number on too-small data is never a
+release signal), the fabricated-citation gate automates only the
+evidence-exists half and marks the supports-the-relation hand-check as
+`manual_required`, cost is an explicit `not_measurable` placeholder, and
+synthetic seeds carry a not-quality-evidence warning in every report. The
+command exits non-zero only when an *evaluated* gate fails, so `make eval` on
+the synthetic seed stays green while the report says plainly that no release
+gate was measurable. With no `GOOGLE_FACTCHECK_API_KEY`, retrieval returns
+zero evidence exactly as the live system does, and the report labels the run
+`no_external_evidence`.
+
+**Annotation guidelines.** `evals/ANNOTATION_GUIDELINES.md` is the labeling
+manual for production gold sets: per-label decision rules for claim types
+(including the satire vs misleading vs contradicted boundary), veracity
+classes, the sensitivity gate, abstention and media wrong-context, worked
+edge cases, and the IAA process (double-labeling scope, agreement targets,
+adjudication rules and adjudicator).
