@@ -78,13 +78,15 @@ async def _run_one(example: dict, session_factory) -> Prediction:
         cited_ids = tuple(case.assessment.evidence_ids) if case.assessment else ()
         verdict = case.assessment.verdict if case.assessment else "unverifiable"
         confidence = case.assessment.confidence if case.assessment else "Low"
-        flagged = bool(case.security_flags)
+        flagged = any(f.get("type") == "prompt_injection_suspected" for f in (case.security_flags or []))
+        sensitivity_flagged = any(f.get("type") == "sensitive_claim" for f in (case.security_flags or []))
         checkable = [c for c in claims if c.gate_status == GATE_PROCEED]
         # Retrieval runs only when the injection scan is clean and at least one
         # claim passed the gate; this mirrors pipeline._run_case exactly.
-        retrieval_attempted = (not flagged) and bool(checkable)
+        retrieval_attempted = (not flagged) and (not sensitivity_flagged) and bool(checkable)
         status_value = case.status.value if isinstance(case.status, CaseStatus) else str(case.status)
-        routed_to_human = status_value == CaseStatus.pending_review.value or flagged or verdict == "unverifiable"
+        # pending_review remains universal, but sensitive routing is a distinct gate signal.
+        routed_to_human = flagged or sensitivity_flagged or verdict == "unverifiable"
         predicted_types = tuple(sorted({c.claim_type for c in claims}))
     latency_ms = (time.perf_counter() - started) * 1000.0
     return Prediction(
@@ -105,5 +107,6 @@ async def _run_one(example: dict, session_factory) -> Prediction:
         cited_evidence_ids=cited_ids,
         stored_evidence_ids=stored_ids,
         latency_ms=latency_ms,
+        sensitivity_flagged=sensitivity_flagged,
         warnings=tuple(warnings),
     )
