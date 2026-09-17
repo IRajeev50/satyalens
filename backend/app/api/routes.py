@@ -19,14 +19,21 @@ router = APIRouter()
 
 @router.get("/status")
 def status():
-    """Report whether an evidence source is connected, without leaking the key.
+    """Report which evidence/reasoning sources are connected, without leaking keys.
 
-    The UI reads this on load to warn that verdicts will stay 'unverifiable'
-    until an evidence source is configured.
+    The UI reads this on load to tell the user what the system can currently do.
     """
-    configured = bool(settings.google_factcheck_api_key)
-    return {"factcheck_configured": configured,
-            "evidence_source": "google_factcheck" if configured else None}
+    factcheck = bool(settings.google_factcheck_api_key)
+    websearch_on = bool(settings.search_api_key)
+    llm_on = bool(settings.llm_api_key)
+    sources = [name for name, on in (("google_factcheck", factcheck),
+                                     ("web_search", websearch_on),
+                                     ("llm_reasoning", llm_on)) if on]
+    return {"factcheck_configured": factcheck,
+            "websearch_configured": websearch_on,
+            "llm_configured": llm_on,
+            "reasoning_enabled": llm_on,
+            "evidence_sources": sources}
 
 def serialize(case, warnings=None):
     return {"case_id": case.id, "status": case.status.value, "input_type": case.input_type, "source_url": case.source_url, "language": case.language,
