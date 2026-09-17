@@ -12,8 +12,8 @@ LLM returns a grounded verdict as strict JSON. Safety rules enforced here:
 * Honest degrade: with no key configured, ``build_client`` returns None and the
   pipeline falls back to fact-check-only assessment.
 
-Provider-agnostic by ``provider``; an Anthropic Messages implementation ships
-here. The model never gets tools and never sees secrets.
+Provider-agnostic by ``provider``; Anthropic Messages and Gemini through its
+OpenAI-compatible endpoint ship here. The model never gets tools and never sees secrets.
 """
 from __future__ import annotations
 
@@ -26,7 +26,9 @@ import httpx
 from .injection import wrap_untrusted_for_llm
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+GEMINI_OPENAI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 DEFAULT_MODEL = "claude-sonnet-5"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 
 VERDICTS = ("supported", "contradicted", "misleading", "partly_true", "unverifiable")
 CONFIDENCES = ("High", "Moderate", "Low")
@@ -104,28 +106,44 @@ class LLMClient:
                  model: str | None = None, transport: httpx.AsyncBaseTransport | None = None):
         self.api_key = api_key
         self.provider = provider or "anthropic"
-        self.model = model or DEFAULT_MODEL
+        self.model = model or (DEFAULT_GEMINI_MODEL if self.provider == "gemini" else DEFAULT_MODEL)
         self.transport = transport
 
     async def adjudicate(self, claim: str, evidence: list[dict]) -> Adjudication | None:
         """Return a grounded adjudication, or None if the call failed (caller falls back)."""
-        if self.provider != "anthropic":
+        if self.provider not in {"anthropic", "gemini"}:
             return None
         try:
             async with httpx.AsyncClient(timeout=45, transport=self.transport) as client:
-                r = await client.post(ANTHROPIC_URL, headers={
-                    "x-api-key": self.api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                }, json={
-                    "model": self.model,
-                    "max_tokens": 1024,
-                    "system": SYSTEM,
-                    "messages": [{"role": "user", "content": _build_user_prompt(claim, evidence)}],
-                })
-                r.raise_for_status()
-                blocks = r.json().get("content", [])
-                text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+                if self.provider == "gemini":
+                    r = await client.post(GEMINI_OPENAI_URL, headers={
+                        "authorization": f"Bearer {self.api_key}",
+                        "content-type": "application/json",
+                    }, json={
+                        "model": self.model,
+                        "max_tokens": 1024,
+                        "response_format": {"type": "json_object"},
+                        "messages": [
+                            {"role": "system", "content": SYSTEM},
+                            {"role": "user", "content": _build_user_prompt(claim, evidence)},
+                        ],
+                    })
+                    r.raise_for_status()
+                    text = r.json()["choices"][0]["message"]["content"]
+                else:
+                    r = await client.post(ANTHROPIC_URL, headers={
+                        "x-api-key": self.api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    }, json={
+                        "model": self.model,
+                        "max_tokens": 1024,
+                        "system": SYSTEM,
+                        "messages": [{"role": "user", "content": _build_user_prompt(claim, evidence)}],
+                    })
+                    r.raise_for_status()
+                    blocks = r.json().get("content", [])
+                    text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
                 return _coerce(_extract_json(text), len(evidence))
         except (httpx.HTTPError, ValueError, KeyError):
             return None
