@@ -32,7 +32,7 @@ def status():
     return {"factcheck_configured": factcheck,
             "websearch_configured": websearch_on,
             "llm_configured": llm_on,
-            "reasoning_enabled": llm_on,
+            "reasoning_enabled": llm_on and (factcheck or websearch_on),
             "evidence_sources": sources}
 
 def serialize(case, warnings=None):
