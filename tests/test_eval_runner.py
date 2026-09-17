@@ -59,14 +59,14 @@ def test_runner_rejects_invalid_example():
 # ---- metric computation ---------------------------------------------------
 
 def test_sensitive_recall_exact_counts_at_floor():
-    preds = [mkpred(id=f"eval-{i:03d}", bucket="political_sensitive", routed=(i != 7))
-             for i in range(1, 51)]
+    preds = [Prediction(**{**mkpred(id=f"eval-{i:03d}", bucket="political_sensitive", routed=(i != 7)).__dict__,
+                            "sensitivity_flagged": True}) for i in range(1, 51)]
     result = sensitive_to_human_recall(preds)
     assert (result.numerator, result.denominator) == (49, 50)
     assert result.value == pytest.approx(0.98)
     assert result.status == "pass"
-    preds[7] = mkpred(id="eval-007", bucket="political_sensitive", routed=False)
-    preds[8] = mkpred(id="eval-008", bucket="political_sensitive", routed=False)
+    preds[7] = Prediction(**{**mkpred(id="eval-007", bucket="political_sensitive", routed=False).__dict__, "sensitivity_flagged": True})
+    preds[8] = Prediction(**{**mkpred(id="eval-008", bucket="political_sensitive", routed=False).__dict__, "sensitivity_flagged": True})
     assert sensitive_to_human_recall(preds).status == "fail"
 
 
@@ -193,3 +193,10 @@ def test_harness_runs_live_pipeline_end_to_end(tmp_path, monkeypatch):
     assert payload["metrics"]["gates"] and len(payload["predictions"]) == 3
     md = md_path.read_text(encoding="utf-8")
     assert "unevaluated" in md and "NOT evidence of system quality" in md
+
+def test_sensitive_metric_requires_real_sensitivity_gate_signal():
+    merely_pending = [mkpred(id=f"eval-{i:03d}", bucket="political_sensitive", routed=True)
+                      for i in range(1, 51)]
+    assert sensitive_to_human_recall(merely_pending).status == "fail"
+    gated = [Prediction(**{**p.__dict__, "sensitivity_flagged": True}) for p in merely_pending]
+    assert sensitive_to_human_recall(gated).status == "pass"
