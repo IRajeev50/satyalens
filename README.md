@@ -50,8 +50,8 @@ Stop it with `docker compose down`. Add `-v` only if you intend to delete local 
 
 - **No key:** pasted text and public article URLs work; cases, claims and assessments are stored. Extraction is deterministic. With no external evidence, the rubric deliberately returns `unverifiable / Low` rather than inventing support.
 - **`GOOGLE_FACTCHECK_API_KEY`:** calls the real Google Fact Check Tools API and stores matching review URLs, quotes/published claims, publishers and ratings. Create a key with that API enabled in Google Cloud.
-- **`LLM_API_KEY`, `LLM_PROVIDER`, `LLM_MODEL`:** labeled seam for later multilingual/model-assisted claim extraction. Phase 1 does not call it.
-- **`SEARCH_API_KEY`, `SEARCH_PROVIDER`:** labeled seam for later open-web and official-source retrieval. Phase 1 does not call it.
+- **`LLM_API_KEY`, `LLM_PROVIDER`, `LLM_MODEL`:** enables grounded per-claim adjudication over retrieved evidence; outputs remain pending human review.
+- **`SEARCH_API_KEY`, `SEARCH_PROVIDER`:** enables Tavily or Brave discovery. SatyaLens fetches result pages where possible and treats unfetched snippets as weak leads.
 
 No integration is simulated and no key is hardcoded.
 
@@ -130,7 +130,7 @@ proceeds to retrieval and veracity scoring; the rest are returned as typed,
 first-class results (`gate_status: "non_checkable"`), never as errors. Each
 claim carries a structured component record: `subject`, `predicate`, `object`,
 `quantity`, `place`, `time`, `authority`, `modality`. Typing is deterministic;
-the `LLM_*` settings remain a labeled seam for later model-assisted typing.
+claim typing remains deterministic; configured `LLM_*` settings are used later for evidence-grounded adjudication, not for bypassing this gate.
 
 **Evals scaffold.** `evals/` holds the eval example schema (`schema.json`), a
 deterministic generator (`generate_seed.py`), a stdlib validator
@@ -148,7 +148,7 @@ articles, OCR output, forwarded messages) is treated as untrusted
 stripped, length capped), scanned by a deterministic injection detector, and -
 when flagged - routed to human review with external retrieval skipped,
 `security_flags` recorded and a warning returned. `wrap_untrusted_for_llm`
-fences untrusted text for the future LLM seam. The full model, attack vectors
+fences untrusted text before configured LLM adjudication. The full model, attack vectors
 and residual risk are in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 Regenerate and validate the seed:
