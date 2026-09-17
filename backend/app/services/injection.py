@@ -41,19 +41,43 @@ def scan_for_injection(text: str) -> InjectionScan:
 
 _CONTROL_ALLOWED = {"\n", "\t"}
 
+# ZWNJ (U+200C) and ZWJ (U+200D) are Unicode category Cf but are *linguistically
+# required* in Devanagari and other Indic scripts (conjunct control, correct
+# spelling). Stripping them corrupts Hindi / Bengali / Gurmukhi text, so they are
+# preserved here even though every other control/format character is removed. To
+# stop an attacker hiding an injection with these characters, the injection scan
+# runs on a detection-only view with them removed (see ``sanitize_and_scan``).
+_FORMAT_PRESERVED = {"‌", "‍"}
+
 
 def sanitize_untrusted(text: str, max_length: int = 50_000) -> str:
-    """Strip control/format characters (zero-width, bidi overrides, etc.) and cap length."""
+    """Strip control/format characters (zero-width, bidi overrides, etc.) and cap length.
+
+    Preserves ZWNJ/ZWJ so Indic-script content survives intact; all other Cc/Cf
+    characters (soft hyphen, ZWSP, bidi overrides, isolates, BOM, ...) are removed.
+    """
     cleaned = "".join(
         ch for ch in text
-        if ch in _CONTROL_ALLOWED or unicodedata.category(ch) not in {"Cc", "Cf"}
+        if ch in _CONTROL_ALLOWED
+        or ch in _FORMAT_PRESERVED
+        or unicodedata.category(ch) not in {"Cc", "Cf"}
     )
     return cleaned[:max_length]
 
 
+def _detection_view(text: str) -> str:
+    """De-obfuscated copy for injection scanning only.
+
+    Removes the ZWNJ/ZWJ that ``sanitize_untrusted`` preserves, so a payload like
+    ``ig<ZWNJ>nore previous instructions`` still matches the pattern scan. This
+    text is used ONLY for detection; the returned sanitized text keeps the joiners.
+    """
+    return text.translate({0x200C: None, 0x200D: None})
+
+
 def sanitize_and_scan(text: str, max_length: int = 50_000) -> tuple[str, InjectionScan]:
     cleaned = sanitize_untrusted(text, max_length)
-    return cleaned, scan_for_injection(cleaned)
+    return cleaned, scan_for_injection(_detection_view(cleaned))
 
 
 def wrap_untrusted_for_llm(content: str, source_label: str = "untrusted-content") -> str:

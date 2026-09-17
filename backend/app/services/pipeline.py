@@ -62,7 +62,9 @@ async def _run_case(db: Session, raw_text: str, original_input: str, input_type:
                 warnings.append(result.warning)
             for item in result.items:
                 e = EvidenceItem(claim=claim, **item); db.add(e); db.flush()
-                all_items.append({**item, "id": e.id})
+                # claim_text is passed to the rubric's relevance guard only; it is
+                # not a column on EvidenceItem, so it is added after the model is built.
+                all_items.append({**item, "id": e.id, "claim_text": claim.text})
 
     finding = assess(len(checkable), all_items)
     path = [gate_line, *finding.reasoning_path]
